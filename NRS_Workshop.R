@@ -4,6 +4,9 @@ rm(list=ls())
 options(scipen=999)
 # set work directory
 setwd(dir = "~/Documents/R Directory/Non_Representative_Survey_Methods_Workshop/")
+
+#install.packages("data.table",dependencies = TRUE)
+
 library(data.table)
 # # # # # # # # 
 # # # # # # # # 
@@ -49,7 +52,7 @@ levels(survey$nextGE_V) = c("conservative",#"Conservative"
                                "ukip",#"UKIP"                                 
                                "novote")#"Would.not.vote")
 levels(survey$T_pastGE) = c(NA,0,0,NA,1)
-survey$T_pastGE = as.numeric(as.characxter(unlist(survey$T_pastGE)))
+survey$T_pastGE = as.numeric(as.character(unlist(survey$T_pastGE)))
 levels(survey$V_pastGE) =c(NA,#0
                               NA,#blank
                               "conservative",#"Conservative"                         
@@ -142,6 +145,7 @@ levels(survey$tenure) = c(NA,#""
                           )
 
 # show random sample of 30 observations from survey
+#install.packages('xtable',dependencies = TRUE)
 library(xtable)
 print(xtable(survey[sample(1:dim(survey)[1],size = 30),]), include.rownames=FALSE)
 
@@ -153,12 +157,14 @@ print(xtable(survey[sample(1:dim(survey)[1],size = 30),]), include.rownames=FALS
 # https://medium.com/@chrishanretty/final-estimates-of-the-leave-vote-or-areal-interpolation-and-the-uks-referendum-on-eu-membership-5490b6cab878
 C_res_EU = read.csv("Final estimates of the Leave vote share in the EU referendum.csv")
 C_res_EU_turnout = read.csv("Hanretty Turnout estimates for Westminster constituencies in the EU referendum - turnout.csv")
+
 C_res_EU = 
   merge(C_res_EU[,c("PCON11CD","Constituency.name","Figure.to.use")],
         C_res_EU_turnout,
         by.x = c("PCON11CD","Constituency.name"),
         by.y = c("PCON11CD","Seat"),
         all = TRUE)
+
 # change spelling here - weird accent messed up the read
 levels(C_res_EU$Constituency.name)[which(levels(C_res_EU$Constituency.name)=="Ynys\xcaMon")] = "Ynys Mon"
 
@@ -177,16 +183,24 @@ names(C_res_EU) = c("pcon", #"PCON11CD"
 # raw constituency level estimates v. results for turnout and vote choice
 # create unified turnout/vote variable
 survey$brexit_VT = ifelse(survey$p_T_brexit<10,"novote",as.character(unlist(survey$brexit_V)))
+
+prop.table(table(survey$brexit_V))
+prop.table(table(survey$brexit_VT))
+
 # the survey also estimates northern ireland, whilst we don't have pcon results for that; we can ignore.
 survey = survey[-which(substr(survey$pcon,1,1)=="N"|substr(survey$pcon,1,1)=="M"),]
 survey$pcon = as.factor(as.character(unlist(survey$pcon)))
 # estimate area-level turnout
+
 pct_brexit_T_pred_raw = 1-(table(survey$pcon,survey$brexit_VT)[,"novote"]/rowSums(table(survey$pcon,survey$brexit_VT)))
+
 pct_brexit_T_pred_raw = pct_brexit_T_pred_raw[-which(is.na(pct_brexit_T_pred_raw ))]
 # estimate area-level leave pct
 pct_brexit_leave_pred_raw = table(survey$pcon,survey$brexit_VT)[,"leave"]/
   rowSums(table(survey$pcon,survey$brexit_VT)[,-which(colnames(table(survey$pcon,survey$brexit_VT))=="novote")])
 pct_brexit_leave_pred_raw = pct_brexit_leave_pred_raw[-which(is.na(pct_brexit_leave_pred_raw ))]
+
+
 # create mean absolute error function
 mae = function(y,x){mean(abs(y-x),na.rm=TRUE)}
 
@@ -198,15 +212,18 @@ missing_in_survey_V = which(is.na(match(C_res_EU$pcon,names(pct_brexit_leave_pre
 pdf(file = 'raw_sample_means_preformance.pdf',width = 10,height = 5)
 par(mfrow = c(1,2))
 # raw estimates of turnout results 
-plot(
-pct_brexit_T_pred_raw[match(names(pct_brexit_T_pred_raw),C_res_EU$pcon[-missing_in_survey])],
-C_res_EU$pct_brexit_T[-missing_in_survey],
-bty = "n",xlab = "predicted",ylab = 'observed',main = 'PC-level turnout\nraw sample means',
-ylim = c(min(c(C_res_EU$pct_brexit_T,pct_brexit_T_pred_raw),na.rm=TRUE),1),
-xlim = c(min(c(C_res_EU$pct_brexit_T,pct_brexit_T_pred_raw),na.rm=TRUE),1)
+plot(x = pct_brexit_T_pred_raw[match(names(pct_brexit_T_pred_raw),C_res_EU$pcon[-missing_in_survey])],
+y = C_res_EU$pct_brexit_T[-missing_in_survey],
+bty = "n",
+xlab = "predicted",
+ylab = 'observed',
+main = 'PC-level turnout\nraw sample means',
+ylim = c(0,1),
+xlim = c(0,1)
 )
 abline(0,1)
-legend('topleft',legend = c(
+legend('topleft',
+       legend = c(
   paste("MAE (%):",
         round(mae(x = 100*pct_brexit_T_pred_raw[match(names(pct_brexit_T_pred_raw),C_res_EU$pcon[-missing_in_survey])],
                   y = 100*C_res_EU$pct_brexit_T[-missing_in_survey]),2)),
@@ -258,18 +275,23 @@ dev.off()
 
 # examples pre-tabulated cross-tabs table 
 PC_age_edu_crosstabs = read.csv("PC_Age_Edu.csv")
+
 PC_age_edu_crosstabs = PC_age_edu_crosstabs[,-which(names(PC_age_edu_crosstabs)=="date")]
 library(reshape2)
 PC_age_edu_crosstabs = reshape2::melt(PC_age_edu_crosstabs,id.vars = c("geography","geography.code"))
 PC_age_edu_crosstabs = PC_age_edu_crosstabs[-grep("All",PC_age_edu_crosstabs$variable),]
+
 PC_age_edu_crosstabs$variable = gsub("\\.","",gsub("\\.qualifications\\.","",
                                      gsub("\\.to\\.","-",
                                      gsub("measures\\.\\.Value","",
                                           gsub("Highest\\.Level\\.of\\.Qualification","_",
                                                gsub("Age","",PC_age_edu_crosstabs$variable))))))
+
 PC_age_edu_crosstabs$variable = as.character(unlist(PC_age_edu_crosstabs$variable))
 PC_age_edu_crosstabs$age = unlist(lapply(PC_age_edu_crosstabs$variable,function(x){strsplit(x,split="\\_")[[1]][1]}))
 PC_age_edu_crosstabs$edu = unlist(lapply(PC_age_edu_crosstabs$variable,function(x){strsplit(x,split="\\_")[[1]][2]}))
+
+
 PC_age_edu_crosstabs = PC_age_edu_crosstabs[,-which(names(PC_age_edu_crosstabs)=="variable")]
 PC_age_edu_crosstabs = PC_age_edu_crosstabs[rev(order(PC_age_edu_crosstabs$value)),]
 names(PC_age_edu_crosstabs) = c("pcon_name","pcon","N","age","edu")
@@ -310,6 +332,7 @@ levels(PC_age_edu_crosstabs$edu) = c("6. Other",#"Apprenticeship"
                                      "5. Level 4",#"Level4andabove" 
                                      "1. No Qualifications",#"No"             
                                      "6. Other")#"Other"  
+
 # we ate up a category - have to re-aggregate
 PC_age_edu_crosstabs = aggregate(data.frame(N = PC_age_edu_crosstabs$N),
                                  by = list(pcon_name = PC_age_edu_crosstabs$pcon_name,
@@ -320,9 +343,11 @@ PC_age_edu_crosstabs = aggregate(data.frame(N = PC_age_edu_crosstabs$N),
 
 # merge constituencies with lookup to get region 
 lookup1 = 
-read.csv("Ward_to_Westminster_Parliamentary_Constituency_to_Local_Authority_District_December_2016_Lookup_in_the_United_Kingdom.csv")
+read.csv("Ward_to_Westminster_Parliamentary_Constituency_to_Local_Authority_District_December_2016_Lookup_in_the_United_Kingdom.csv",fileEncoding = "UTF-8-BOM")
 lookup2 = 
-read.csv("Local_Authority_District_to_Region_December_2016_Lookup_in_England.csv")
+read.csv("Local_Authority_District_to_Region_December_2016_Lookup_in_England.csv",fileEncoding = "UTF-8-BOM")
+
+
 lookup = merge(lookup1,lookup2,by=c("LAD16CD"),all=TRUE)
 lookup$RGN16NM = as.character(unlist(lookup$RGN16NM))
 lookup$RGN16NM[which(is.na(lookup$RGN16NM))] = "Wales"
@@ -330,6 +355,7 @@ lookup = lookup[complete.cases(lookup[,c("PCON16CD","RGN16NM")]),]
 
 PC_age_edu_crosstabs = 
 merge(PC_age_edu_crosstabs,unique(lookup[,c("PCON16CD","RGN16NM")]),by.x = "pcon",by.y = "PCON16CD")
+
 PC_age_edu_crosstabs$RGN16NM= as.factor(PC_age_edu_crosstabs$RGN16NM)
 # we only care about england and wales in this example
 survey = survey[-which(is.na(match(survey$pcon,PC_age_edu_crosstabs$pcon))),]
@@ -343,6 +369,7 @@ survey$brexit_V = as.character(unlist(survey$brexit_V))
 survey$brexit_V = as.factor(ifelse(survey$p_T_brexit<10,'novote',survey$brexit_V))
 # for now, complete-cases from survey only
 survey_complete = survey[complete.cases(survey[,c("brexit_V","age","edu","pcon")]),]
+
 
 # get pcon_id to match strat.frame
 survey_complete$pcon_id = 
@@ -380,7 +407,6 @@ data_list = list(age_id = survey_complete$age_id,
                  N.j = nlevels(survey_complete$brexit_V)
                  )
 
-
 library(R2jags)
 model_code_polls= '
 model{
@@ -388,6 +414,7 @@ model{
 for(i in 1:N){ for(j in 1:N.j){
 
     pi[i,j] <- omega[i,j]/sum(omega[i,1:N.j])
+    
 brexit[i,j] ~ dpois(omega[i,j])
 omega[i,j] <- exp(mu[i,j])
    mu[i,j] <- lambda[i] + 
@@ -495,9 +522,9 @@ model_run = jags.parallel(data = data_list,
                  model.file=tmpf,
                  n.cluster = 2,
                  n.chains = 2,
-                 n.burnin =10000,
-                 n.iter = 15000,
-                 n.thin = 5) # Amount of thinning
+                 n.burnin =1500,
+                 n.iter =  2000,
+                 n.thin = 2) # Amount of thinning
 
 # Check convergence 
 plot(model_run$BUGSoutput$summary[,"Rhat"],
@@ -506,6 +533,7 @@ plot(model_run$BUGSoutput$summary[,"Rhat"],
 abline(h = 1.1,col = 'darkgreen')
 
 # Predictions 
+##install.packages('foreach',dependencies = TRUE)
 library(foreach)
 
 # get mean estimates (no uncertainty)
@@ -528,6 +556,8 @@ aggregate(p_pred_mean[,]* PC_age_edu_crosstabs$N,
                     pcon = PC_age_edu_crosstabs$pcon),
           FUN = function(x){sum(x,na.rm=TRUE)})
 
+# View(area_pred_counts)
+# View(area_N)
 area_N = 
   aggregate(PC_age_edu_crosstabs$N,
             by = list(pcon_name = PC_age_edu_crosstabs$pcon_name,
@@ -542,7 +572,6 @@ area_V_preds_leave = area_V_preds[,which(levels(survey_complete$brexit_V)=="leav
 
 # Plot results 
 # plot results for comparison with observed turnout and percentage leave
-
 # we don't have NI and Scotland in thise strat. frame
 missing_in_strat_frame = which(is.na(match(C_res_EU$pcon,levels(PC_age_edu_crosstabs$pcon))))
 
@@ -578,7 +607,7 @@ lines(x = area_T_preds[match(levels(PC_age_edu_crosstabs$pcon),C_res_EU$pcon[-mi
 plot(
   area_V_preds_leave[match(levels(PC_age_edu_crosstabs$pcon),C_res_EU$pcon[-missing_in_strat_frame])],
   C_res_EU$pct_brexit_V[-missing_in_strat_frame],
-  bty = "n",xlab = "predicted",ylab = 'observed',main = 'PC-level turnout\nfixed effects',
+  bty = "n",xlab = "predicted",ylab = 'observed',main = 'PC-level leave\nfixed effects',
   ylim = c(min(c(C_res_EU$pct_brexit_V,area_V_preds_leave),na.rm=TRUE),1),
   xlim = c(min(c(C_res_EU$pct_brexit_V,area_V_preds_leave),na.rm=TRUE),1)
 )
@@ -699,9 +728,9 @@ model_run = jags.parallel(data = data_list,
                           model.file=tmpf,
                           n.cluster = 2,
                           n.chains = 2,
-                          n.burnin =10000,
-                          n.iter = 15000,
-                          n.thin = 5) # Amount of thinning
+                          n.burnin =1500,
+                          n.iter =  2000,
+                          n.thin = 2) # Amount of thinning
 
 
 # Check convergence 
@@ -782,7 +811,7 @@ lines(x = area_T_preds[match(levels(PC_age_edu_crosstabs$pcon),C_res_EU$pcon[-mi
 plot(
   area_V_preds_leave[match(levels(PC_age_edu_crosstabs$pcon),C_res_EU$pcon[-missing_in_strat_frame])],
   C_res_EU$pct_brexit_V[-missing_in_strat_frame],
-  bty = "n",xlab = "predicted",ylab = 'observed',main = 'PC-level turnout\nmultilevel model',
+  bty = "n",xlab = "predicted",ylab = 'observed',main = 'PC-level leave\nmultilevel model',
   ylim = c(min(c(C_res_EU$pct_brexit_V,area_V_preds_leave),na.rm=TRUE),1),
   xlim = c(min(c(C_res_EU$pct_brexit_V,area_V_preds_leave),na.rm=TRUE),1)
 )
@@ -835,6 +864,7 @@ dev.off()
 # # # # # # # # 
 # # # # # # # # 
 # Multilevel  Model (england and wales only): Areal predictor included 
+# and interaction between age and edu; and ridge-variance on areal predictor. 
 
 pcon_vars = read.csv("BES-2015-General-Election-results-file-v2.21.csv")
 
@@ -855,6 +885,7 @@ pcon_vars = pcon_vars[,c("ONSConstID",
                          )]
 
 pcon_vars = data.frame(ONSConstID = pcon_vars$ONSConstID,apply(pcon_vars[,-1],2,function(x){scale(ifelse(is.na(x),mean(x,na.rm = TRUE),x))})) # fill in mean for NA
+
 pcon_vars_strat = pcon_vars[match(levels(PC_age_edu_crosstabs$pcon),pcon_vars$ONSConstID),]
 
 pcon_vars_survey = pcon_vars[match(survey_complete$pcon,pcon_vars$ONSConstID),]
@@ -876,6 +907,7 @@ omega[i,j] <- exp(mu[i,j])
               beta_star[j] + 
               alpha_star[age_id[i],j] +
               eta_star[edu_id[i],j] +
+              ae_star[age_id[i],edu_id[i],j] +
               rho_star[region_id[i],j] +
               gamma_star[pcon_id[i],j] + 
               inprod(phi[1:N.x,j],X[i,1:N.x])
@@ -883,10 +915,14 @@ omega[i,j] <- exp(mu[i,j])
 
 for(x in 1:N.x){
 phi[x,1]<-0
-}
+#}
 for(j in 2:N.j){
-phi[1:N.x,j] ~ dmnorm(M[1:N.x],V[1:N.x,1:N.x])
-}
+#phi[1:N.x,j] ~ dmnorm(M[1:N.x],V[1:N.x,1:N.x])
+phi[x,j] ~ dnorm(0,tau_phi)
+} }
+
+tau_phi <- pow(sigma_phi,-2)
+sigma_phi ~ dunif(0,10)
 
 beta_star[1] <- 0 
 for(j in 2:N.j){
@@ -907,6 +943,21 @@ alpha[a,j] ~ dnorm(0,tau[1])
 for(j in 1:N.j){
 alpha_star[a,j] <- alpha[a,j]*aux[1]
 } }
+
+for(a in 1:N.age ){
+for(e in 1:N.edu ){
+ae[a,e,1] <- 0
+for(j in 2:N.j){
+ae[a,e,j] ~ dnorm(0,tau_ae)
+}
+for(j in 1:N.j){
+ae_star[a,e,j] <- ae[a,e,j]*aux_ae
+} } }
+
+aux_ae ~ dnorm(0,0.01)
+tau_ae <- pow(sigma_ae,-2)
+sigma_ae ~ dunif(0,10)
+
 
 for(e in 1:N.edu ){
 eta[e,1] <- 0
@@ -956,7 +1007,10 @@ close(tmps)
 
 
 # Choose the parameters to watch
-model_parameters =  c('pi',"beta_star","alpha_star","eta_star","rho_star","gamma_star","lambda","phi","sigma")
+model_parameters =  c('pi',"beta_star",
+                      "sigma_phi",
+                      "ae_star",
+                      "alpha_star","eta_star","rho_star","gamma_star","lambda","phi","sigma")
 
 # Run the model - can be slow
 model_run = jags.parallel(data = data_list,
@@ -964,9 +1018,9 @@ model_run = jags.parallel(data = data_list,
                           model.file=tmpf,
                           n.cluster = 2,
                           n.chains = 2,
-                          n.burnin =10000,
-                          n.iter = 15000,
-                          n.thin = 5) # Amount of thinning
+                          n.burnin =1500,
+                          n.iter = 2000,
+                          n.thin = 2) # Amount of thinning
 
 # Check convergence 
 plot(model_run$BUGSoutput$summary[,"Rhat"],
@@ -974,39 +1028,128 @@ plot(model_run$BUGSoutput$summary[,"Rhat"],
      ylab = 'Rhat')
 abline(h = 1.1,col = 'darkgreen')
 
+
+# check impact of ridge variance on areal predictors regression coefficients 
+plot(y = model_run$BUGSoutput$sims.list$phi[,1,3],
+     x = model_run$BUGSoutput$sims.list$sigma_phi,
+     xlab = "sigma_phi",ylab = "phi",bty = "n",pch = NA,
+     xlim = c(min(as.matrix(model_run$BUGSoutput$sims.list$sigma_phi)),
+              max(as.matrix(model_run$BUGSoutput$sims.list$sigma_phi))),
+     ylim = c(min(as.matrix(model_run$BUGSoutput$sims.list$phi)),
+              max(as.matrix(model_run$BUGSoutput$sims.list$phi)))
+)
+for(j in 2:data_list$N.j){
+for(l in 1:data_list$N.x){
+par(new=TRUE)
+  loess_curve_model = 
+    loess(formula = model_run$BUGSoutput$sims.list$phi[,l,j] ~ 
+            model_run$BUGSoutput$sims.list$sigma_phi)
+  x <- order( model_run$BUGSoutput$sims.list$sigma_phi)
+  lines(x =  model_run$BUGSoutput$sims.list$sigma_phi[x],
+        y = loess_curve_model$fitted[x],
+        col = c('red','darkgreen')[j-1],lty = 1, lwd =2)
+} }
+legend("topleft",lty = 1,lwd = 2, 
+       col=c("red","darkgreen"),
+       legend = c("novote area pred","remain area pred"),
+       bty = "n")
+
+dev.off()
+
 # Predictions 
 library(foreach)
-# get mean estimates (no uncertainty)
+# get mean estimates (uncertainty)
 raw_pred_mean = 
   foreach(j  = 1:data_list$N.j,.combine = 'cbind') %do%
   as.data.table(
     model_run$BUGSoutput$mean$beta_star[j] +
       model_run$BUGSoutput$mean$alpha_star[as.integer(PC_age_edu_crosstabs$age),j] +
       model_run$BUGSoutput$mean$eta_star[as.integer(PC_age_edu_crosstabs$edu),j] +
+      sapply(1:dim(PC_age_edu_crosstabs)[1],function(x){
+        model_run$BUGSoutput$mean$ae_star[as.integer(PC_age_edu_crosstabs$age)[x],
+                                          as.integer(PC_age_edu_crosstabs$edu)[x],j]
+        }) + 
       model_run$BUGSoutput$mean$rho_star[as.integer(PC_age_edu_crosstabs$RGN16NM),j] + 
       model_run$BUGSoutput$mean$gamma_star[as.integer(PC_age_edu_crosstabs$pcon),j] + 
       as.matrix(pcon_vars_strat[as.integer(PC_age_edu_crosstabs$pcon),-1]) %*% 
       as.numeric(model_run$BUGSoutput$mean$phi[,j] )
   ) 
-
 p_pred_mean = t(apply(raw_pred_mean,1,function(x){exp(x)/(sum(exp(x)))}))
 
-# get simulations of results (uncertainty)
-#raw_pred_sims = 
-#foreach(j  = 1:data_list$N.j,.combine = 'cbind') %do%
-#as.data.table(
-#sapply(X = 1:model_run$BUGSoutput$n.sims,FUN = function(x){
-#    model_run$BUGSoutput$sims.list$beta[x,j] +
-#    model_run$BUGSoutput$sims.list$alpha[x,as.integer(PC_age_edu_crosstabs$age),j] +
-#    model_run$BUGSoutput$sims.list$eta[x,as.integer(PC_age_edu_crosstabs$edu),j] +
-#    model_run$BUGSoutput$sims.list$gamma[x,as.integer(PC_age_edu_crosstabs$pcon),j]
-#  }))
-#p_pred_sims = foreach(s = 1:model_run$BUGSoutput$n.sims) %do%
-#  as.data.table(
-#  t(apply(raw_pred_sims[,which(!is.na(match(names(raw_pred_sims),paste("V",s,sep="")))),with = FALSE],
-#        1,function(x){exp(x)/(sum(exp(x)))})))
+# Example of calculation of turnout with uncertainty (in-class practical)
+# get uncertainty estimates for 1 constituency
+# get mean estimates (no uncertainty)
+# folowing code is a bit inefficient - it'll take a while to run. Try to come ip with something faster! 
+j = 2
+raw_pred_sims_novote = 
+  sapply(1:model_run$BUGSoutput$n.sims ,function(s){
+    as.data.frame(
+      model_run$BUGSoutput$sims.list$beta_star[s,j] +
+      model_run$BUGSoutput$sims.list$alpha_star[s,as.integer(PC_age_edu_crosstabs$age),j] +
+      model_run$BUGSoutput$sims.list$eta_star[s,as.integer(PC_age_edu_crosstabs$edu),j] +
+      sapply(1:dim(PC_age_edu_crosstabs)[1],function(x){
+          model_run$BUGSoutput$sims.list$ae_star[1,as.integer(PC_age_edu_crosstabs$age)[x],
+                                                 as.integer(PC_age_edu_crosstabs$edu)[x],j]
+        }) + 
+      model_run$BUGSoutput$sims.list$rho_star[s,as.integer(PC_age_edu_crosstabs$RGN16NM),j] + 
+      model_run$BUGSoutput$sims.list$gamma_star[s,as.integer(PC_age_edu_crosstabs$pcon),j] + 
+      as.matrix(pcon_vars_strat[as.integer(PC_age_edu_crosstabs$pcon),-1]) %*% 
+      as.numeric(model_run$BUGSoutput$sims.list$phi[s,,j] )
+  )}) 
 
-# We will not use the uncertainty for now - let's look at predictive performance of point estimates 
+j = 3
+raw_pred_sims_remain = 
+  sapply(1:model_run$BUGSoutput$n.sims ,function(s){
+  as.data.frame(
+    model_run$BUGSoutput$sims.list$beta_star[s,j] +
+      model_run$BUGSoutput$sims.list$alpha_star[s,as.integer(PC_age_edu_crosstabs$age),j] +
+      model_run$BUGSoutput$sims.list$eta_star[s,as.integer(PC_age_edu_crosstabs$edu),j] +
+      sapply(1:dim(PC_age_edu_crosstabs)[1],function(x){
+        model_run$BUGSoutput$sims.list$ae_star[s,as.integer(PC_age_edu_crosstabs$age)[x],
+                                               as.integer(PC_age_edu_crosstabs$edu)[x],j]
+      }) + 
+      model_run$BUGSoutput$sims.list$rho_star[s,as.integer(PC_age_edu_crosstabs$RGN16NM),j] + 
+      model_run$BUGSoutput$sims.list$gamma_star[s,as.integer(PC_age_edu_crosstabs$pcon),j] + 
+      as.matrix(pcon_vars_strat[as.integer(PC_age_edu_crosstabs$pcon),-1]) %*% 
+      as.numeric(model_run$BUGSoutput$sims.list$phi[s,,j] )
+  ) })
+
+# remember index 2 is the 'novote' index 
+# apply softmax link
+t_sims = 
+foreach(s = 1:model_run$BUGSoutput$n.sims,.combine = 'cbind') %do%
+  # cbinding 0 because leave is set to 0
+  as.numeric(
+1-(exp(cbind(0,raw_pred_sims_novote[[s]],raw_pred_sims_remain[[s]]))/
+    rowSums(exp(cbind(0,raw_pred_sims_novote[[s]],raw_pred_sims_remain[[s]]))))[,2])
+
+
+t_counts = 
+aggregate(t_sims*PC_age_edu_crosstabs$N,
+          by = list(PC_age_edu_crosstabs$pcon),
+          FUN = sum)
+
+area_counts = 
+  aggregate(PC_age_edu_crosstabs$N,
+            by = list(PC_age_edu_crosstabs$pcon),
+            FUN = sum)
+
+area_T_sims = 
+foreach(s = 1:model_run$BUGSoutput$n.sims,.combine = 'cbind') %do% t_counts[,s+1]/area_counts$x
+# plot uncertainty of 6 random constituency estimates
+
+sample_cons_random = sample(1:dim(area_T_sims )[1],size  = 6)
+par(mfrow = c(2,3))
+for(i in 1:6){
+hist(area_T_sims[sample_cons_random[i],],main = t_counts[,1][i],
+     xlab = 'pct turnout',
+     xlim = c(0,0.5))
+}
+
+
+# We will not use the uncertainty for now for calculateing predictive accuracy 
+# - let's look at predictive performance of point estimates 
+
 # aggregate means over constituencies 
 area_pred_counts = 
   aggregate(p_pred_mean[,]* PC_age_edu_crosstabs$N,
@@ -1064,7 +1207,7 @@ lines(x = area_T_preds[match(levels(PC_age_edu_crosstabs$pcon),C_res_EU$pcon[-mi
 plot(
   area_V_preds_leave[match(levels(PC_age_edu_crosstabs$pcon),C_res_EU$pcon[-missing_in_strat_frame])],
   C_res_EU$pct_brexit_V[-missing_in_strat_frame],
-  bty = "n",xlab = "predicted",ylab = 'observed',main = 'PC-level turnout\nmultilevel model + area predictor',
+  bty = "n",xlab = "predicted",ylab = 'observed',main = 'PC-level leave\nmultilevel model + area predictor',
   ylim = c(min(c(C_res_EU$pct_brexit_V,area_V_preds_leave),na.rm=TRUE),1),
   xlim = c(min(c(C_res_EU$pct_brexit_V,area_V_preds_leave),na.rm=TRUE),1)
 )
@@ -1087,4 +1230,6 @@ lines(x = area_V_preds_leave[match(levels(PC_age_edu_crosstabs$pcon),C_res_EU$pc
       y = loess_curve_model$fitted[j],
       col = 'darkgreen',lty = 1, lwd =2 )
 dev.off()
+
+
 
